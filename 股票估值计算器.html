@@ -1,0 +1,356 @@
+<html>
+
+<head>
+
+<meta charset="utf-8"> 
+
+<title>股票估值计算器 v1.0</title>
+
+<script src="https://cdn.staticfile.org/echarts/4.3.0/echarts.min.js"></script>
+<script>
+var STORK = {
+	F : 0,	//资本的总成本率（折现率）
+	L : 0,	//自由现金流总额
+	L1 : new Array,
+	L2 : new Array,
+	L1L2 : 0,	//自由现金流总额(阶段1，2总额)
+	O : 0		//少数股东权益占比
+}
+
+// 会计金额格式转为普通数字
+function rMoney(num) {
+	return parseFloat(num.replace(/[^\d\\.-]/g, ''))
+}
+
+// 普通数字转会计金额格式 第二种
+function toThousandsFormates(num) {
+    // 判断传进来的数字是否为非空数字
+    if (!isNaN(parseFloat(num))) {
+        var newNum = Number(Number(num).toFixed(2)).toLocaleString('zh', { minimumFractionDigits: 2 })
+        return newNum
+
+    } else {
+        return ''
+    }
+}
+
+//精度浮点加法
+function accAdd(arg1, arg2) {
+    var r1, r2, m, c;
+    try {
+        r1 = arg1.toString().split(".")[1].length;
+    }
+    catch (e) {
+        r1 = 0;
+    }
+    try {
+        r2 = arg2.toString().split(".")[1].length;
+    }
+    catch (e) {
+        r2 = 0;
+    }
+    c = Math.abs(r1 - r2);
+    m = Math.pow(10, Math.max(r1, r2));
+    if (c > 0) {
+        var cm = Math.pow(10, c);
+        if (r1 > r2) {
+            arg1 = Number(arg1.toString().replace(".", ""));
+            arg2 = Number(arg2.toString().replace(".", "")) * cm;
+        } else {
+            arg1 = Number(arg1.toString().replace(".", "")) * cm;
+            arg2 = Number(arg2.toString().replace(".", ""));
+        }
+    } else {
+        arg1 = Number(arg1.toString().replace(".", ""));
+        arg2 = Number(arg2.toString().replace(".", ""));
+    }
+    return (arg1 + arg2) / m;
+}
+ 
+//精度浮点减法
+function accSubtract(arg1, arg2) {
+    var r1, r2, m, n;
+    try {
+        r1 = arg1.toString().split(".")[1].length;
+    }
+    catch (e) {
+        r1 = 0;
+    }
+    try {
+        r2 = arg2.toString().split(".")[1].length;
+    }
+    catch (e) {
+        r2 = 0;
+    }
+    m = Math.pow(10, Math.max(r1, r2)); //last modify by deeka //动态控制精度长度
+    n = (r1 >= r2) ? r1 : r2;
+    return parseFloat(((arg1 * m - arg2 * m) / m).toFixed(n));
+}
+ 
+//精度浮点乘法
+function accMultiply(arg1, arg2) {
+    var m = 0, s1 = arg1.toString(), s2 = arg2.toString();
+    try {
+        m += s1.split(".")[1].length;
+    }
+    catch (e) {
+    }
+    try {
+        m += s2.split(".")[1].length;
+    }
+    catch (e) {
+    }
+    return Number(s1.replace(".", "")) * Number(s2.replace(".", "")) / Math.pow(10, m);
+}
+ 
+//精度浮点除法
+function accDivision(arg1, arg2) {
+    var t1 = 0, t2 = 0, r1, r2;
+    try {
+        t1 = arg1.toString().split(".")[1].length;
+    }
+    catch (e) {
+    }
+    try {
+        t2 = arg2.toString().split(".")[1].length;
+    }
+    catch (e) {
+    }
+    with (Math) {
+        r1 = Number(arg1.toString().replace(".", ""));
+        r2 = Number(arg2.toString().replace(".", ""));
+        return (r1 / r2) * pow(10, t2 - t1);
+    }
+}
+
+//主响应函数
+function Main() {
+
+	PartOne();
+	
+	PartTwo();
+	
+	Part3();
+	
+	Part4();
+	
+	//Chart();
+}
+
+//计算资本成本率
+function PartOne() {
+	var a = rMoney(idA.value);
+	var b = rMoney(idB.value);
+	var c = parseFloat(idC.value)/100;
+	var d = parseFloat(idD.value)/100;
+	var e = parseFloat(idE.value)/100;
+	console.log("PartOne: %f-%f-%f-%f-%f\n",a,b,c,d,e);
+	
+	var a_percent = a/(a+b);
+	a_percent = Math.round(a_percent*10000)/10000;//保留4位小数
+	var b_percent = accSubtract(1,a_percent);
+	
+	STORK.F = accSubtract(1,d)*c*a_percent + e*b_percent;
+	STORK.F = Math.round(STORK.F*10000)/10000;//保留4位小数
+
+	console.log("PartOne: a_percent-%f b_percent-%f F-%f\n",
+				a_percent,b_percent,STORK.F);
+	
+	
+	idF.value = (STORK.F*100).toFixed(2) + "%";
+	idF1.value = idF.value;
+}
+
+//经营自由现金流折现
+function PartTwo() {
+	var g = parseFloat(idG.value)/100;
+	var h = parseFloat(idH.value)/100;
+	var w = parseFloat(idW.value)/100;
+	var i = rMoney(idI.value);
+	var j = parseInt(idJ.value);
+	var k = parseInt(idK.value);
+	
+	STORK.L1 = [];
+	STORK.L2 = [];
+
+	console.log("PartOne: %f-%f-%f-%f-%f-%f\n",g,h,w,i,j,k);
+
+	var tem = i;
+	var sum = 0;
+	var q = (1+g)/(1+STORK.F);
+	//q = Math.round(q*10000)/10000;//保留4位小数
+	
+	console.log("PartTwo: %f-%f-%f\n",g,STORK.F,q);
+
+	//第1阶段自由现金
+	for(var t1=1; t1 <= j; t1++) {
+		tem = Math.pow(q, t1);
+		tem = i*tem;
+		STORK.L1.push(tem);
+		sum = sum + tem;
+	}
+	console.log("PartTwo1: sum:%f  tem:%f\n",sum,tem);
+	console.log(STORK.L1);
+
+	//第2阶段自由现金
+	var f2 = tem;
+	var q1 = (1+h)/(1+STORK.F);
+	//q1 = Math.round(q1*10000)/10000;//保留4位小数
+	
+	for(var t2=1; t2 <= k; t2++) {
+		tem = Math.pow(q1, t2);
+		tem = f2*tem;
+		STORK.L2.push(tem);
+		sum = sum + tem;
+	}
+	console.log("PartTwo:2 sum:%f  tem:%f\n",sum,tem);
+	console.log(STORK.L2);
+	STORK.L1L2 = sum;
+	
+	//第3阶段自由现金
+	var f3 = tem;
+	var q2 = (1+w)/(1+STORK.F);
+	
+	if (q2 < 1) {
+		tem = f3/accSubtract(1,q2);
+	} else {
+		idL.value = "第3阶段自由现金流增长率(W)<资本的总成本率（折现率）(F)";
+	}
+	
+	STORK.L = STORK.L1L2 + tem;
+	idL.value = toThousandsFormates(STORK.L);
+	idL2.value = toThousandsFormates(STORK.L);
+	
+	console.log("PartTwo:3 STORK.L:%f  q2:%f\n",STORK.L,q2);
+}
+
+//少数股东权益占比
+function Part3() {
+	var m = rMoney(idM.value);
+	var n = rMoney(idN.value);
+	
+	STORK.O =  m/(m+n);
+	STORK.O = Math.round(STORK.O*10000)/10000;//保留4位小数
+	idO.value = (STORK.O*100).toFixed(2) + "%";
+}
+
+//公司股票价值
+function Part4() {
+	var p = rMoney(idP.value);
+	var q = rMoney(idQ.value);
+	var r = rMoney(idR.value);
+	var u = rMoney(idU.value);
+	var tem = 0;
+	
+	tem = p + q + STORK.L - r;
+	idS.value = toThousandsFormates(tem);
+
+	var tt = tem*(1-STORK.O);
+	idT.value = toThousandsFormates(tt);
+
+	var vv = tt/u;
+	idV.value = toThousandsFormates(vv);
+}
+
+function Chart() {
+	// 基于准备好的dom，初始化echarts实例
+	var myChart = echarts.init(document.getElementById('chart'));
+
+	// 指定图表的配置项和数据
+	var option = {
+		title: {
+			text: '例年自由现金流折现'
+		},
+		tooltip: {},
+		legend: {
+			data:['元']
+		},
+		xAxis: {
+			//data: ["衬衫","羊毛衫","雪纺衫","裤子","高跟鞋","袜子"]
+		},
+		yAxis: {},
+		series: [
+			{
+				name: '第1阶段',
+				type: 'bar',
+				//data: [5, 20, 36, 10, 10, 20]
+				data: STORK.L1
+			},
+			
+			{
+				name: '第2阶段',
+				type: 'bar',
+				//data: [5, 20, 36, 10, 10, 20]
+				data: STORK.L2
+			},
+		]
+	};
+
+	// 使用刚指定的配置项和数据显示图表。
+	myChart.setOption(option);
+
+	document.getElementById("chart").style.display="inline";
+}
+</script>
+
+</head>
+
+<body>
+
+<h1>股票估值计算器 v1.0</h1>
+
+<form oninput="Main()" style = "width: 100%">
+
+<!-- 计算资本成本率 -->
+<fieldset>
+<legend>计算资本成本率</legend>
+负债总额(A)：<input type="text" id="idA"><br>
+股权资本总额(B)：<input type="text" id="idB"><br>
+负债加权平均利息(C)：<input type="text" id="idC">%<br>
+企业实际所得税率(D)：<input type="text" id="idD">%<br>
+股票的预期回报率(E)：<input type="text" id="idE" value="9">%<br>
+资本的总成本率（折现率）(F)：<output id="idF"></output>
+</fieldset><br>
+
+<!-- 经营自由现金流折现 -->
+<fieldset>
+<legend>经营自由现金流折现</legend>
+第1阶段自由现金流增长率(G)：<input type="text" id="idG">%<br>
+第2阶段自由现金流增长率(H)：<input type="text" id="idH">%<br>
+第3阶段自由现金流增长率(W)：<input type="text" id="idW">%<br>
+资本的总成本率（折现率）(F)：<input type="text" id = "idF1" disabled></input><br>
+自由现金基数(I)：<input type="text" id="idI"><br>
+第1阶段计算年数(J)：<input type="number" min="1" max="10" id="idJ" value="5"><br>
+第2阶段计算年数(K)：<input type="number" min="1" max="10" id="idK" value="5"><br>
+第3阶段为剩余所有年份：无穷<br>
+自由现金流总额(L)：<output id="idL"></output><br>
+<div id="chart" style="width: 600px;height:400px; display:none"></div>
+</fieldset>
+<br>
+
+<!-- 少数股东权益占比 -->
+<fieldset>
+<legend>少数股东权益占比</legend>
+少数股东权益(M)：<input type="text" id="idM"><br>
+股东权益(N)：<input type="text" id="idN"><br>
+少数股东权益占比(O)：<output id="idO"></output>
+</fieldset>
+<br>
+
+<fieldset>
+<legend>公司股票价值</legend>
+加：金融资产公允价值(P)：<input type="text" id="idP"><br>
+加：长期股权投资价值(Q)：<input type="text" id="idQ"><br>
+加：经营自由现金流折现总额(L)：<input type="text" id = "idL2" disabled></input><br>
+减：公司债务(R)：<input type="text" id="idR"><br>
+公司股票价值(S)：<output id="idS"></output><br>
+扣除少数股东权益的公司股票价值(T)：<output id="idT"></output><br>
+总股本数(U)：<input type="text" id="idU"><br>
+每股股票价值(V)：<output id="idV"></output><br>
+</fieldset><br>
+
+</form>
+
+</body>
+
+</html>
